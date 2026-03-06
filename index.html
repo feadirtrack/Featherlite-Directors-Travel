@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Director Travel Hub</title>
+
+<!-- ╔══════════════════════════════════════════════════════════╗
+     ║  🔧 SETUP — DO THIS ONCE BEFORE SHARING               ║
+     ╠══════════════════════════════════════════════════════════╣
+     ║  STEP 1 — Firebase Project (5 min)                     ║
+     ║  • Go to console.firebase.google.com                   ║
+     ║  • Click "Add project" → name it → continue           ║
+     ║  • In your project: Build → Firestore Database         ║
+     ║    → Create database → Start in TEST mode             ║
+     ║  • Build → Authentication → Sign-in method            ║
+     ║    → Enable Google                                     ║
+     ║  • Project Settings (gear icon) → Your Apps           ║
+     ║    → Add Web App → copy the firebaseConfig values     ║
+     ║                                                        ║
+     ║  STEP 2 — Paste config below (replace placeholder)    ║
+     ║                                                        ║
+     ║  STEP 3 — Add your Gmail to ADMIN_EMAILS              ║
+     ║                                                        ║
+     ║  STEP 4 — Host this file (options):                   ║
+     ║  • Firebase Hosting: firebase deploy (free)           ║
+     ║  • Netlify Drop: drag file to netlify.com/drop        ║
+     ║  • GitHub Pages: push to a repo → enable Pages        ║
+     ║  • Any static web host                                ║
+     ╚══════════════════════════════════════════════════════════╝ -->
+
+<script>
+// ── STEP 2: YOUR FIREBASE CONFIG ─────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBigqJm9RAKZ3gFPKLsbIQD0SG2PNXQN24",
+  authDomain:        "featherlite-director-travel.firebaseapp.com",
+  projectId:         "featherlite-director-travel",
+  storageBucket:     "featherlite-director-travel.firebasestorage.app",
+  messagingSenderId: "39315370320",
+  appId:             "1:39315370320:web:a9c650c1cf08497307fc55",
+};
+
+// ── STEP 3: YOUR ADMIN EMAIL(S) ───────────────────────────────
+// Anyone in this list gets full admin access (rename/edit/delete).
+// Everyone else who signs in with Google is a view-only user.
+const ADMIN_EMAILS = [
+  "bharath.n@featherlitefurniture.com"     // ← replace with your Google account email
+  // add more: "colleague@company.com",
+];
+</script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f8f5ef;color:#1a1a2e;min-height:100vh;}
+
+/* ── AUTH ── */
+.auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(140deg,#0c1a35 0%,#163060 50%,#1e4080 100%);position:relative;overflow:hidden;}
+.auth-screen::before{content:'';position:absolute;width:700px;height:700px;border-radius:50%;border:1px solid rgba(201,168,76,0.12);top:-280px;right:-280px;pointer-events:none;}
+.auth-screen::after{content:'';position:absolute;width:500px;height:500px;border-radius:50%;border:1px solid rgba(201,168,76,0.08);bottom:-200px;left:-150px;pointer-events:none;}
+.auth-card{background:#fff;border-radius:24px;padding:52px 48px;width:440px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,0.3);position:relative;z-index:1;text-align:center;}
+.auth-emblem{width:64px;height:64px;background:#0f1f3d;border-radius:18px;display:inline-flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:18px;}
+.auth-brand{font-family:'DM Serif Display',serif;font-size:26px;color:#0f1f3d;display:block;margin-bottom:6px;}
+.auth-tagline{font-size:11px;color:#9ca3af;letter-spacing:2.5px;text-transform:uppercase;display:block;margin-bottom:28px;}
+.auth-desc{font-size:14px;color:#6b7280;line-height:1.75;margin-bottom:28px;}
+.btn-google{display:inline-flex;align-items:center;gap:12px;padding:14px 24px;border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:#1a1a2e;cursor:pointer;transition:all 0.2s;width:100%;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+.btn-google:hover{border-color:#c9a84c;box-shadow:0 4px 20px rgba(201,168,76,0.18);transform:translateY(-1px);}
+.auth-note{font-size:12px;color:#9ca3af;margin-top:20px;line-height:1.6;}
+
+/* ── LOADING ── */
+.loading-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(140deg,#0c1a35,#163060);color:#fff;gap:16px;}
+.loading-spinner{width:40px;height:40px;border:3px solid rgba(201,168,76,0.3);border-top-color:#c9a84c;border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── TOP BAR ── */
+.top-bar{background:#0f1f3d;color:#fff;padding:0 32px;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 16px rgba(0,0,0,0.2);}
+.top-brand{font-family:'DM Serif Display',serif;font-size:20px;letter-spacing:0.3px;}
+.top-right{display:flex;align-items:center;gap:14px;}
+.live-dot{display:flex;align-items:center;gap:6px;font-size:12px;color:#4ade80;background:rgba(74,222,128,0.12);padding:5px 12px;border-radius:20px;}
+.live-dot span.pulse{width:7px;height:7px;background:#4ade80;border-radius:50%;animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.user-chip{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,0.1);padding:5px 14px 5px 7px;border-radius:30px;}
+.user-photo{width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid rgba(201,168,76,0.4);}
+.user-av{width:32px;height:32px;border-radius:50%;background:#c9a84c;color:#0f1f3d;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
+.user-dname{font-size:13px;font-weight:500;}
+.user-role-lbl{font-size:10px;color:#c9a84c;margin-top:1px;}
+.btn-out{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.18);color:#fff;padding:6px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;}
+.btn-out:hover{background:rgba(255,255,255,0.2);}
+
+/* ── NAV ── */
+.nav-bar{background:#fff;border-bottom:1px solid #ede9e0;padding:0 32px;display:flex;gap:2px;}
+.nav-btn{padding:14px 20px;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;}
+.nav-btn.active{color:#0f1f3d;border-bottom-color:#c9a84c;}
+.nav-btn:hover:not(.active){color:#0f1f3d;}
+
+/* ── PAGE LAYOUT ── */
+.main{padding:32px;max-width:1500px;margin:0 auto;}
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:16px;}
+.pt{font-family:'DM Serif Display',serif;font-size:28px;color:#0f1f3d;}
+.ps{font-size:14px;color:#6b7280;margin-top:4px;}
+
+/* ── MONTH NAV ── */
+.mnav{display:flex;align-items:center;gap:14px;background:#fff;padding:10px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(15,31,61,0.09);}
+.mbtn{width:34px;height:34px;border-radius:8px;border:1.5px solid #ede9e0;background:#f8f5ef;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+.mbtn:hover{background:#0f1f3d;color:#fff;border-color:#0f1f3d;}
+.mlbl{font-family:'DM Serif Display',serif;font-size:20px;color:#0f1f3d;min-width:185px;text-align:center;}
+
+/* ── STATS ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}
+.scard{background:#fff;border-radius:14px;padding:20px 24px;box-shadow:0 4px 20px rgba(15,31,61,0.08);}
+.sv{font-family:'DM Serif Display',serif;font-size:34px;color:#0f1f3d;}
+.sl{font-size:12px;color:#6b7280;margin-top:4px;text-transform:uppercase;letter-spacing:.5px;}
+
+/* ── SUMMARY TABLE ── */
+.stbl-wrap{background:#fff;border-radius:16px;box-shadow:0 4px 20px rgba(15,31,61,0.08);overflow:hidden;}
+.stbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+.stbl th{background:#0f1f3d;color:#fff;padding:10px 5px;text-align:center;font-weight:500;}
+.stbl th.dcol{text-align:left;padding-left:20px;min-width:165px;}
+.stbl td{padding:5px 4px;text-align:center;border-bottom:1px solid #f8f5ef;}
+.dnc{text-align:left!important;padding-left:20px!important;font-weight:500;color:#0f1f3d;background:#f8f5ef;white-space:nowrap;}
+.dc{width:30px;height:30px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+.dc.available{background:#e8f5ee;color:#2d7d52;}
+.dc.travelling{background:#fdecea;color:#c0392b;}
+.dc.today{outline:2px solid #c9a84c;outline-offset:1px;}
+.ar td{background:#0f1f3d;}
+.arlbl{background:#1a3060!important;color:#c9a84c;font-weight:600;}
+.adot{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;}
+.legend{display:flex;gap:20px;margin-top:14px;flex-wrap:wrap;}
+.li{display:flex;align-items:center;gap:7px;font-size:13px;color:#6b7280;}
+.ld{width:14px;height:14px;border-radius:4px;border:1px solid;}
+
+/* ── CALENDAR ── */
+.dtabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px;}
+.dtab{padding:8px 18px;border-radius:30px;border:1.5px solid #ede9e0;background:#fff;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;color:#6b7280;cursor:pointer;transition:all 0.2s;}
+.dtab.active{background:#0f1f3d;color:#fff;border-color:#0f1f3d;}
+.dtab:hover:not(.active){border-color:#0f1f3d;color:#0f1f3d;}
+.calwrap{background:#fff;border-radius:16px;box-shadow:0 4px 20px rgba(15,31,61,0.08);padding:28px;}
+.caltop{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;}
+.caldn{font-family:'DM Serif Display',serif;font-size:22px;color:#0f1f3d;}
+.calh{font-size:13px;color:#6b7280;}
+.cghdr{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px;}
+.cdl{text-align:center;font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1px;text-transform:uppercase;padding:8px 0;}
+.cgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.cc{aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid transparent;background:#f8f5ef;min-height:58px;transition:transform .15s,box-shadow .15s;position:relative;}
+.cc.clickable{cursor:pointer;}
+.cc.clickable:hover{transform:scale(1.04);box-shadow:0 4px 16px rgba(15,31,61,0.12);}
+.cc.available{background:#e8f5ee;border-color:#2d7d52;}
+.cc.travelling{background:#fdecea;border-color:#c0392b;}
+.cc.today{box-shadow:0 0 0 3px #c9a84c;}
+.cn{font-weight:600;font-size:15px;color:#0f1f3d;}
+.cc.available .cn{color:#2d7d52;}
+.cc.travelling .cn{color:#c0392b;}
+.ci{font-size:13px;margin-top:1px;}
+.cn2{font-size:9px;color:#6b7280;text-align:center;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;}
+.cc.travelling .cn2{color:#c0392b;}
+
+/* ── ADMIN ── */
+.agrid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+.fw{grid-column:1/-1;}
+.acard{background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 20px rgba(15,31,61,0.08);}
+.ctitle{font-family:'DM Serif Display',serif;font-size:18px;color:#0f1f3d;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #ede9e0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.chint{font-size:12px;color:#6b7280;font-family:'DM Sans',sans-serif;font-weight:400;}
+.drow{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8f5ef;border-radius:10px;margin-bottom:8px;gap:10px;}
+.drn{font-weight:500;font-size:14px;color:#0f1f3d;flex:1;}
+.drbtns{display:flex;gap:6px;}
+.bsm{padding:5px 11px;border:none;border-radius:7px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500;transition:all .2s;}
+.bsm.edit{background:#fef9e7;color:#b8860b;}
+.bsm.edit:hover{background:#b8860b;color:#fff;}
+.bsm.danger{background:#fdecea;color:#c0392b;}
+.bsm.danger:hover{background:#c0392b;color:#fff;}
+.adrow{display:flex;gap:10px;margin-top:16px;}
+.inp{width:100%;padding:11px 14px;border:1.5px solid #ede9e0;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;color:#1a1a2e;background:#f8f5ef;outline:none;transition:border-color .2s;}
+.inp:focus{border-color:#c9a84c;background:#fff;}
+.btnadd{padding:11px 18px;background:#0f1f3d;color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .2s;}
+.btnadd:hover{background:#1a3060;}
+.urow{display:flex;align-items:center;gap:10px;padding:11px 14px;background:#f8f5ef;border-radius:10px;margin-bottom:8px;}
+.uphoto{width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;}
+.uav{width:36px;height:36px;border-radius:50%;background:#0f1f3d;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;}
+.uri{flex:1;}
+.urn{font-weight:500;font-size:14px;}
+.ure{font-size:12px;color:#6b7280;}
+.rbadge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+.rbadge.admin{background:#e8c97a;color:#b8860b;}
+.rbadge.user{background:#ede9e0;color:#6b7280;}
+.alog{display:flex;flex-direction:column;max-height:440px;overflow-y:auto;}
+.litem{display:flex;gap:14px;padding:13px 0;border-bottom:1px solid #f8f5ef;align-items:flex-start;}
+.litem:last-child{border-bottom:none;}
+.lav{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;}
+.lavt{width:34px;height:34px;border-radius:50%;background:#0f1f3d;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;}
+.lavt.isa{background:#c9a84c;color:#0f1f3d;}
+.lbody{flex:1;}
+.ltxt{font-size:13px;line-height:1.65;}
+.lmeta{font-size:11px;color:#6b7280;margin-top:4px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.lbadge{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
+.empty{text-align:center;padding:40px 20px;color:#6b7280;font-size:14px;line-height:2.2;}
+
+/* ── MODAL ── */
+.ov{position:fixed;inset:0;background:rgba(10,20,45,0.68);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+.mod{background:#fff;border-radius:22px;padding:38px;width:460px;max-width:94vw;box-shadow:0 20px 70px rgba(0,0,0,0.22);animation:mIn .22s ease;}
+@keyframes mIn{from{transform:scale(.92) translateY(14px);opacity:0}to{transform:none;opacity:1}}
+.mtitle{font-family:'DM Serif Display',serif;font-size:22px;color:#0f1f3d;margin-bottom:4px;}
+.msub{font-size:13px;color:#6b7280;margin-bottom:24px;}
+.scgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
+.sc{padding:16px;border-radius:12px;border:2px solid #ede9e0;cursor:pointer;text-align:center;font-size:13px;font-weight:500;transition:all .2s;}
+.sci{font-size:26px;margin-bottom:6px;}
+.scs{font-size:11px;color:#6b7280;margin-top:4px;}
+.sc.sav{border-color:#2d7d52;background:#e8f5ee;color:#2d7d52;}
+.sc.str{border-color:#c0392b;background:#fdecea;color:#c0392b;}
+.sc:hover{transform:scale(1.02);}
+.fg{margin-bottom:18px;}
+.flbl{display:block;font-size:13px;font-weight:500;color:#0f1f3d;margin-bottom:6px;}
+.mactions{display:flex;gap:12px;margin-top:4px;}
+.bcx{flex:1;padding:12px;background:#f8f5ef;border:1.5px solid #ede9e0;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;color:#6b7280;}
+.bsv{flex:1;padding:12px;background:#0f1f3d;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;color:#fff;}
+.bsv:hover{background:#1a3060;}
+.bdg{padding:12px;background:#fdecea;border:1.5px solid #c0392b;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;color:#c0392b;}
+.bdg:hover{background:#c0392b;color:#fff;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;right:24px;background:#0f1f3d;color:#fff;padding:14px 20px;border-radius:12px;font-size:14px;box-shadow:0 8px 32px rgba(0,0,0,0.18);z-index:1000;transform:translateY(100px);opacity:0;transition:all .3s;pointer-events:none;}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.success{border-left:4px solid #2d7d52;}
+.toast.error{border-left:4px solid #c0392b;}
+
+@media(max-width:768px){
+  .main{padding:16px;}
+  .agrid{grid-template-columns:1fr;}
+  .stats{grid-template-columns:1fr 1fr;}
+  .top-bar,.nav-bar{padding:0 16px;}
+  .auth-card{padding:36px 24px;}
+  .user-dname{display:none;}
+}
+</style>
+</head>
+<body>
+<div id="root"><div class="loading-screen"><div class="loading-spinner"></div><p style="font-family:'DM Serif Display',serif;font-size:18px">Loading…</p></div></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp }           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc,
+         deleteDoc, addDoc, getDoc, serverTimestamp, query, orderBy, limit }
+                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── Init ─────────────────────────────────────────────────────
+const fbApp  = initializeApp(FIREBASE_CONFIG);
+const auth   = getAuth(fbApp);
+const db     = getFirestore(fbApp);
+const COL_DIR  = collection(db, "directors");
+const COL_ACT  = collection(db, "activityLog");
+const tDoc     = id => doc(db, "travelData", id);
+
+// ── App State ─────────────────────────────────────────────────
+let CU = null, isAdmin = false;
+let directors = [], travelData = {}, activityLog = [];
+let selDirId = null, viewM = new Date().getMonth(), viewY = new Date().getFullYear();
+let curPage = "summary";
+let unsubs = [];
+let modalSt = {};
+
+// ── Util ─────────────────────────────────────────────────────
+const toDS = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const todayDS = () => toDS(new Date());
+const dim  = (y,m) => new Date(y,m+1,0).getDate();
+const fday = (y,m) => new Date(y,m,1).getDay();
+const mLbl = (y,m) => new Date(y,m,1).toLocaleString("default",{month:"long",year:"numeric"});
+const fmtD = ds => new Date(ds+"T00:00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"});
+const fmtT = ts => { const d=ts?.toDate?ts.toDate():new Date(ts); return d.toLocaleDateString("en-IN",{day:"numeric",month:"short"})+" "+d.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}); };
+const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const toast = (msg,t="success") => { const e=document.getElementById("toast"); e.textContent=(t==="success"?"✓  ":"✕  ")+msg; e.className=`toast ${t} show`; clearTimeout(e._t); e._t=setTimeout(()=>e.classList.remove("show"),3200); };
+const esc = s => String(s||"").replace(/'/g,"\\'").replace(/"/g,"&quot;");
+const getEntry = (dId,ds) => travelData[dId]?.[ds]||null;
+
+// ── Activity logger ───────────────────────────────────────────
+const logAct = (action, details) => addDoc(COL_ACT,{
+  ts: serverTimestamp(), userId:CU.uid,
+  userName:CU.displayName||CU.email, userEmail:CU.email,
+  userPhoto:CU.photoURL||"", userRole:isAdmin?"admin":"user",
+  action, details
+});
+
+// ── Auth ─────────────────────────────────────────────────────
+const doGoogleSignIn = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e=>toast("Sign-in failed: "+e.message,"error"));
+const doSignOut = () => { unsubs.forEach(u=>u()); unsubs=[]; signOut(auth); };
+window.doSignOut = doSignOut;
+
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    CU = user;
+    isAdmin = ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(user.email.toLowerCase());
+    renderShell();
+    startListeners();
+  } else {
+    CU = null; isAdmin = false;
+    unsubs.forEach(u=>u()); unsubs=[];
+    renderAuth();
+  }
+});
+
+// ── Listeners ─────────────────────────────────────────────────
+function startListeners() {
+  const u1 = onSnapshot(query(COL_DIR, orderBy("name")), snap => {
+    directors = snap.docs.map(d=>({id:d.id,...d.data()}));
+    if (!selDirId && directors.length) selDirId = directors[0].id;
+    startTravelListeners();
+    renderContent();
+  });
+  const u2 = onSnapshot(query(COL_ACT, orderBy("ts","desc"), limit(300)), snap => {
+    activityLog = snap.docs.map(d=>({id:d.id,...d.data()}));
+    if (curPage==="admin") renderContent();
+  });
+  unsubs.push(u1, u2);
+}
+let tUnsubs = [];
+function startTravelListeners() {
+  tUnsubs.forEach(u=>u());
+  tUnsubs = [];
+  directors.forEach(dir => {
+    const u = onSnapshot(tDoc(dir.id), snap => {
+      travelData[dir.id] = snap.exists() ? snap.data() : {};
+      renderContent();
+    });
+    tUnsubs.push(u);
+  });
+}
+
+// ── Director CRUD ─────────────────────────────────────────────
+async function addDirector(name) {
+  if (!name.trim()) return;
+  const ref = doc(COL_DIR);
+  await setDoc(ref, {name:name.trim(), createdAt:serverTimestamp()});
+  logAct("dir_add",{dirId:ref.id, name:name.trim()});
+}
+async function renameDirector(id, oldName, newName) {
+  if (!newName.trim()||oldName===newName.trim()) return;
+  await updateDoc(doc(COL_DIR,id),{name:newName.trim()});
+  logAct("dir_rename",{dirId:id,oldName,newName:newName.trim()});
+}
+async function deleteDirector(id, name) {
+  if (!confirm(`Remove "${name}" and all their travel data?`)) return;
+  await deleteDoc(doc(COL_DIR,id));
+  await deleteDoc(tDoc(id));
+  logAct("dir_delete",{dirId:id,name});
+  if (selDirId===id) selDirId=directors.find(d=>d.id!==id)?.id||null;
+}
+
+// ── Travel data ───────────────────────────────────────────────
+async function setStatus(dirId, ds, status, note) {
+  const ref = tDoc(dirId);
+  const snap = await getDoc(ref);
+  const data = snap.exists() ? snap.data() : {};
+  data[ds] = {status, note:note||""};
+  await setDoc(ref, data);
+  logAct("status_set",{dirId, dirName:directors.find(d=>d.id===dirId)?.name, date:ds, status, note:note||""});
+}
+async function clearStatus(dirId, ds) {
+  const ref = tDoc(dirId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const data = snap.data();
+  delete data[ds];
+  await setDoc(ref, data);
+  logAct("status_clear",{dirId, dirName:directors.find(d=>d.id===dirId)?.name, date:ds});
+}
+
+// ── Seed (first-run) ─────────────────────────────────────────
+async function seedIfNeeded() {
+  const s = await getDoc(doc(db,"meta","seeded"));
+  if (s.exists()) return;
+  const names = ["Rajesh Kumar","Priya Sharma","Anand Mehta","Sunita Patel","Vikram Singh","Meena Rao","Arjun Nair","Deepa Reddy"];
+  for (const name of names) await addDoc(COL_DIR,{name,createdAt:serverTimestamp()});
+  await setDoc(doc(db,"meta","seeded"),{at:serverTimestamp()});
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function renderAuth() {
+  document.getElementById("root").innerHTML = `
+  <div class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-emblem">✈️</div>
+      <span class="auth-brand">Director Travel Hub</span>
+      <span class="auth-tagline">Board Travel Management</span>
+      <p class="auth-desc">Sign in with your Google account to access the director travel dashboard. Your admin controls what you can edit.</p>
+      <button class="btn-google" id="gbtn">
+        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.8 2.5 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.4l7.8 6C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8C43.8 37.3 46.5 31.4 46.5 24.5z"/><path fill="#FBBC05" d="M10.4 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6l-7.8-6A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.7 2.2-7.7 2.2-6.3 0-11.6-4.2-13.5-9.9l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>
+        Continue with Google
+      </button>
+      <p class="auth-note">No registration needed. Access is managed by your organisation admin.</p>
+    </div>
+  </div>`;
+  document.getElementById("gbtn").onclick = doGoogleSignIn;
+}
+
+function renderShell() {
+  document.getElementById("root").innerHTML = `
+  <div class="top-bar">
+    <div class="top-brand">✈️&nbsp; Director Travel Hub</div>
+    <div class="top-right">
+      <div class="live-dot"><span class="pulse"></span> Live</div>
+      <div class="user-chip">
+        ${CU.photoURL?`<img src="${CU.photoURL}" class="user-photo"/>`:`<div class="user-av">${(CU.displayName||CU.email)[0].toUpperCase()}</div>`}
+        <div>
+          <div class="user-dname">${CU.displayName||CU.email}</div>
+          <div class="user-role-lbl">${isAdmin?"👑 Admin":"👁 Viewer"}</div>
+        </div>
+      </div>
+      <button class="btn-out" onclick="doSignOut()">Sign Out</button>
+    </div>
+  </div>
+  <div class="nav-bar" id="navbar"></div>
+  <div class="main" id="maincontent"></div>
+  <div id="modlayer"></div>`;
+  renderNav();
+  if (isAdmin) seedIfNeeded();
+}
+
+function renderNav() {
+  const nb = document.getElementById("navbar"); if(!nb)return;
+  nb.innerHTML = `
+    <button class="nav-btn${curPage==="summary"?" active":""}" onclick="_pg('summary')">📊 Summary Overview</button>
+    <button class="nav-btn${curPage==="calendar"?" active":""}" onclick="_pg('calendar')">📅 Director Calendars</button>
+    ${isAdmin?`<button class="nav-btn${curPage==="admin"?" active":""}" onclick="_pg('admin')">⚙️ Admin Panel</button>`:""}`;
+}
+window._pg = p => { curPage=p; renderNav(); renderContent(); };
+
+function renderContent() {
+  const el = document.getElementById("maincontent"); if(!el)return;
+  if (curPage==="summary")  el.innerHTML = buildSummary();
+  if (curPage==="calendar") el.innerHTML = buildCalendar();
+  if (curPage==="admin")    el.innerHTML = buildAdmin();
+}
+
+// ── SUMMARY ──────────────────────────────────────────────────
+function buildSummary() {
+  const today=todayDS(), d=dim(viewY,viewM), days=Array.from({length:d},(_,i)=>i+1);
+  const avT=directors.filter(dr=>{const s=getEntry(dr.id,today);return !s||s.status==="available";}).length;
+  const trT=directors.filter(dr=>{const s=getEntry(dr.id,today);return s&&s.status==="travelling";}).length;
+  let blk=0; for(let i=1;i<=d;i++){const ds=toDS(new Date(viewY,viewM,i));const t=directors.filter(dr=>{const s=getEntry(dr.id,ds);return s&&s.status==="travelling";}).length;if(t>directors.length/2)blk++;}
+  return `
+  <div>
+    <div class="ph">
+      <div><div class="pt">Availability Summary</div><div class="ps">Monthly overview · updates live</div></div>
+      ${mnav()}
+    </div>
+    <div class="stats">
+      ${sc(directors.length,"Total Directors","#c9a84c")}
+      ${sc(avT,"Available Today","#2d7d52")}
+      ${sc(trT,"Travelling Today","#c0392b")}
+      ${sc(blk,"Majority-Away Days","#b8860b")}
+    </div>
+    <div class="stbl-wrap"><div style="overflow-x:auto">
+      <table class="stbl">
+        <thead><tr>
+          <th class="dcol">Director</th>
+          ${days.map(i=>{const dt=new Date(viewY,viewM,i),w=dt.getDay()===0||dt.getDay()===6;return `<th style="opacity:${w?.55:1}">${i}<br/><span style="font-size:9px;font-weight:400">${DAYS[dt.getDay()].slice(0,2)}</span></th>`;}).join("")}
+        </tr></thead>
+        <tbody>
+          ${directors.map(dr=>`<tr>
+            <td class="dnc">${dr.name}</td>
+            ${days.map(i=>{const ds=toDS(new Date(viewY,viewM,i)),e=getEntry(dr.id,ds),it=ds===today;const cls=e?e.status:"";const ic=e?(e.status==="available"?"✓":"✈"):"";return `<td title="${esc(e?.note||"")}"><span class="dc ${cls}${it?" today":""}">${ic}</span></td>`;}).join("")}
+          </tr>`).join("")}
+          <tr class="ar">
+            <td class="dnc arlbl">AVAILABILITY</td>
+            ${days.map(i=>{const ds=toDS(new Date(viewY,viewM,i));const t=directors.filter(dr=>{const s=getEntry(dr.id,ds);return s&&s.status==="travelling";}).length,n=directors.length;let bg="#2d7d52",lb="✓";if(t===n){bg="#c0392b";lb="✗";}else if(t>0){bg="#b8860b";lb=`${n-t}`;}return `<td style="padding:4px;background:#0f1f3d;text-align:center"><span class="adot" style="background:${bg}">${lb}</span></td>`;}).join("")}
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+    <div class="legend">
+      <div class="li"><div class="ld" style="background:#e8f5ee;border-color:#2d7d52"></div>Available</div>
+      <div class="li"><div class="ld" style="background:#fdecea;border-color:#c0392b"></div>Travelling / Not Available</div>
+      <div class="li"><div class="ld" style="background:#f0ebe0;border-color:#ccc"></div>No Data</div>
+    </div>
+  </div>`;
+}
+
+// ── CALENDAR ──────────────────────────────────────────────────
+function buildCalendar() {
+  const today=todayDS(), d=dim(viewY,viewM), f=fday(viewY,viewM);
+  const sdir=directors.find(d=>d.id===selDirId);
+  return `
+  <div>
+    <div class="ph">
+      <div><div class="pt">Director Calendars</div><div class="ps">${isAdmin?"Click a date to update status":"View only — admin manages status"}</div></div>
+      ${mnav()}
+    </div>
+    <div class="dtabs">${directors.map(dr=>`<button class="dtab${dr.id===selDirId?" active":""}" onclick="_sd('${dr.id}')">${dr.name}</button>`).join("")}</div>
+    <div class="calwrap">
+      <div class="caltop">
+        <div class="caldn">${sdir?.name||"—"}</div>
+        <div class="calh">${isAdmin?"✏️ Click a date to set status":"👁 View only"}</div>
+      </div>
+      <div class="cghdr">${DAYS.map(d=>`<div class="cdl">${d}</div>`).join("")}</div>
+      <div class="cgrid">
+        ${Array.from({length:f}).map(()=>"<div></div>").join("")}
+        ${Array.from({length:d},(_,i)=>i+1).map(n=>{
+          const ds=toDS(new Date(viewY,viewM,n)),e=getEntry(selDirId,ds),it=ds===today;
+          const av=e?.status==="available",tr=e?.status==="travelling";
+          return `<div class="cc${av?" available":tr?" travelling":""}${it?" today":""}${isAdmin?" clickable":""}" ${isAdmin?`onclick="_osm('${selDirId}','${ds}')"`:""}><span class="cn">${n}</span><span class="ci">${av?"✅":tr?"✈️":""}</span>${e?.note?`<span class="cn2">${e.note}</span>`:""}</div>`;
+        }).join("")}
+      </div>
+    </div>
+  </div>`;
+}
+window._sd = id => { selDirId=id; renderContent(); };
+
+// ── ADMIN ─────────────────────────────────────────────────────
+function buildAdmin() {
+  const seen={};
+  activityLog.forEach(e=>{if(!seen[e.userEmail])seen[e.userEmail]={email:e.userEmail,name:e.userName,photo:e.userPhoto,role:e.userRole};});
+  const users=Object.values(seen);
+  return `
+  <div>
+    <div class="ph"><div><div class="pt">Admin Panel</div><div class="ps">Manage directors · monitor changes · real-time</div></div></div>
+    <div class="agrid">
+
+      <div class="acard">
+        <div class="ctitle">✈️ Directors <span class="chint">Click ✏️ to rename</span></div>
+        ${directors.map(d=>`<div class="drow"><span class="drn">${d.name}</span><div class="drbtns"><button class="bsm edit" onclick="_orm('${d.id}','${esc(d.name)}')">✏️ Rename</button><button class="bsm danger" onclick="_dd('${d.id}','${esc(d.name)}')">Remove</button></div></div>`).join("")}
+        <div class="adrow"><input class="inp" id="ndinp" placeholder="New director full name" onkeydown="if(event.key==='Enter')_ad()"/><button class="btnadd" onclick="_ad()">+ Add</button></div>
+      </div>
+
+      <div class="acard">
+        <div class="ctitle">👥 Users Who've Signed In <span class="chint">Via Google</span></div>
+        ${users.length===0?`<p class="empty" style="padding:20px">No users yet.</p>`:users.map(u=>`<div class="urow">${u.photo?`<img src="${u.photo}" class="uphoto"/>`:`<div class="uav">${u.name[0].toUpperCase()}</div>`}<div class="uri"><div class="urn">${u.name}</div><div class="ure">${u.email}</div></div><span class="rbadge ${u.role}">${u.role==="admin"?"👑 Admin":"👤 Viewer"}</span></div>`).join("")}
+      </div>
+
+      <div class="acard fw">
+        <div class="ctitle">📋 Activity Log <span class="chint">${activityLog.length} entries · live</span></div>
+        ${activityLog.length===0
+          ?`<div class="empty">🗒️ No activity yet.<br/><span style="font-size:12px">All changes appear here instantly.</span></div>`
+          :`<div class="alog">${activityLog.map(e=>buildLE(e)).join("")}</div>`}
+      </div>
+
+    </div>
+  </div>`;
+}
+
+function buildLE(e) {
+  const d=e.details||{},badges={status_set:{c:"#2d7d52",bg:"#e8f5ee",l:"Status Set"},status_clear:{c:"#888",bg:"#ede9e0",l:"Cleared"},dir_rename:{c:"#6c3483",bg:"#f5eef8",l:"Renamed"},dir_add:{c:"#b8860b",bg:"#fef9e7",l:"Added"},dir_delete:{c:"#c0392b",bg:"#fdecea",l:"Deleted"}};
+  const b=badges[e.action]||{c:"#888",bg:"#eee",l:e.action};
+  let txt="";
+  if(e.action==="status_set")   txt=`marked <b>${d.dirName}</b> as <b>${d.status==="available"?"✅ Available":"✈️ Travelling"}</b> on <b>${fmtD(d.date)}</b>${d.note?` — <i>"${d.note}"</i>`:""}`;
+  else if(e.action==="status_clear") txt=`cleared status for <b>${d.dirName}</b> on <b>${fmtD(d.date)}</b>`;
+  else if(e.action==="dir_rename")   txt=`renamed director <b>${d.oldName}</b> → <b>${d.newName}</b>`;
+  else if(e.action==="dir_add")      txt=`added director <b>${d.name}</b>`;
+  else if(e.action==="dir_delete")   txt=`removed director <b>${d.name}</b>`;
+  return `<div class="litem">${e.userPhoto?`<img src="${e.userPhoto}" class="lav"/>`:`<div class="lavt${e.userRole==="admin"?" isa":""}">${e.userName[0].toUpperCase()}</div>`}<div class="lbody"><div class="ltxt"><b>${e.userName}</b> ${txt}</div><div class="lmeta"><span class="lbadge" style="color:${b.c};background:${b.bg}">${b.l}</span><span>${e.ts?fmtT(e.ts):"just now"}</span><span style="color:${e.userRole==="admin"?"#b8860b":"#6b7280"}">${e.userRole==="admin"?"👑 Admin":"👤 User"}</span><span>${e.userEmail}</span></div></div></div>`;
+}
+
+// ── Modal helpers ─────────────────────────────────────────────
+window._osm = (dirId, ds) => {
+  if (!isAdmin) return;
+  const e=getEntry(dirId,ds), dir=directors.find(d=>d.id===dirId);
+  modalSt={dirId,ds,sel:e?.status||null};
+  document.getElementById("modlayer").innerHTML=`
+  <div class="ov" id="ov" onclick="if(event.target.id==='ov')_cm()">
+    <div class="mod">
+      <div class="mtitle">${dir?.name}</div>
+      <div class="msub">${new Date(ds+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+      <div class="scgrid">
+        <div class="sc${e?.status==="available"?" sav":""}" id="scav" onclick="_ps('available')"><div class="sci">✅</div><div>Available</div><div class="scs">In Office / Reachable</div></div>
+        <div class="sc${e?.status==="travelling"?" str":""}" id="sctr" onclick="_ps('travelling')"><div class="sci">✈️</div><div>Travelling</div><div class="scs">Away / Not Available</div></div>
+      </div>
+      <div class="fg"><label class="flbl">Note (optional)</label><input class="inp" id="tnote" placeholder="e.g. Singapore Conference, NYC Board Meeting" value="${esc(e?.note||"")}"/></div>
+      <div class="mactions">
+        <button class="bcx" onclick="_cm()">Cancel</button>
+        ${e?`<button class="bdg" onclick="_cs()">Clear</button>`:""}
+        <button class="bsv" onclick="_sv()">Save</button>
+      </div>
+    </div>
+  </div>`;
+};
+window._ps = s => {
+  modalSt.sel=s;
+  document.getElementById("scav").className="sc"+(s==="available"?" sav":"");
+  document.getElementById("sctr").className="sc"+(s==="travelling"?" str":"");
+};
+window._sv = async () => {
+  if (!modalSt.sel) return toast("Please select a status","error");
+  const note=document.getElementById("tnote").value.trim();
+  _cm();
+  await setStatus(modalSt.dirId, modalSt.ds, modalSt.sel, note);
+  toast("Status saved!");
+};
+window._cs = async () => { _cm(); await clearStatus(modalSt.dirId, modalSt.ds); toast("Status cleared."); };
+window._cm = () => { document.getElementById("modlayer").innerHTML=""; };
+
+window._orm = (id, name) => {
+  document.getElementById("modlayer").innerHTML=`
+  <div class="ov" id="ov" onclick="if(event.target.id==='ov')_cm()">
+    <div class="mod" style="width:400px">
+      <div class="mtitle">Rename Director</div>
+      <div class="msub">Current name: ${name}</div>
+      <div class="fg"><label class="flbl">New Name</label><input class="inp" id="rinp" value="${name}" onkeydown="if(event.key==='Enter')_rn('${id}','${name}')"/></div>
+      <div class="mactions">
+        <button class="bcx" onclick="_cm()">Cancel</button>
+        <button class="bsv" onclick="_rn('${id}','${name}')">Save Name</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById("rinp")?.focus(),60);
+};
+window._rn = async (id, oldName) => {
+  const v=document.getElementById("rinp").value.trim();
+  _cm();
+  await renameDirector(id, oldName, v);
+  toast("Director renamed!");
+};
+window._dd = (id, name) => deleteDirector(id, name);
+window._ad = async () => {
+  const v=document.getElementById("ndinp")?.value?.trim();
+  if(!v) return;
+  await addDirector(v);
+  document.getElementById("ndinp").value="";
+  toast("Director added!");
+};
+
+// ── Shared component helpers ──────────────────────────────────
+function mnav() {
+  return `<div class="mnav"><button class="mbtn" onclick="_cm2(-1)">‹</button><div class="mlbl">${mLbl(viewY,viewM)}</div><button class="mbtn" onclick="_cm2(1)">›</button></div>`;
+}
+window._cm2 = d => { viewM+=d; if(viewM>11){viewM=0;viewY++;}if(viewM<0){viewM=11;viewY--;} renderContent(); };
+function sc(val,lbl,accent) { return `<div class="scard" style="border-left:4px solid ${accent}"><div class="sv">${val}</div><div class="sl">${lbl}</div></div>`; }
+</script>
+</body>
+</html>
