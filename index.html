@@ -241,13 +241,16 @@ import { initializeApp }           from "https://www.gstatic.com/firebasejs/10.1
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
                                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc,
-         deleteDoc, addDoc, getDoc, serverTimestamp, query, orderBy, limit }
+         deleteDoc, addDoc, getDoc, serverTimestamp, query, orderBy, limit,
+         enableNetwork }
                                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Init ─────────────────────────────────────────────────────
 const fbApp  = initializeApp(FIREBASE_CONFIG);
 const auth   = getAuth(fbApp);
 const db     = getFirestore(fbApp);
+// Force network connection (fixes "client is offline" error)
+enableNetwork(db).catch(() => {});
 const COL_DIR  = collection(db, "directors");
 const COL_ACT  = collection(db, "activityLog");
 const tDoc     = id => doc(db, "travelData", id);
@@ -553,25 +556,42 @@ function buildLE(e) {
 // ── Modal helpers ─────────────────────────────────────────────
 window._osm = (dirId, ds) => {
   if (!isAdmin) return;
-  const e=getEntry(dirId,ds), dir=directors.find(d=>d.id===dirId);
-  modalSt={dirId,ds,sel:e?.status||null};
-  document.getElementById("modlayer").innerHTML=`
-  <div class="ov" id="ov" onclick="if(event.target.id==='ov')_cm()">
+  const e = getEntry(dirId, ds), dir = directors.find(d => d.id === dirId);
+  modalSt = { dirId, ds, sel: e?.status || null };
+
+  document.getElementById("modlayer").innerHTML = `
+  <div class="ov" id="ov">
     <div class="mod">
       <div class="mtitle">${dir?.name}</div>
-      <div class="msub">${new Date(ds+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+      <div class="msub">${new Date(ds + "T00:00:00").toLocaleDateString("en-IN", {weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
       <div class="scgrid">
-        <div class="sc${e?.status==="available"?" sav":""}" id="scav" onclick="_ps('available')"><div class="sci">✅</div><div>Available</div><div class="scs">In Office / Reachable</div></div>
-        <div class="sc${e?.status==="travelling"?" str":""}" id="sctr" onclick="_ps('travelling')"><div class="sci">✈️</div><div>Travelling</div><div class="scs">Away / Not Available</div></div>
+        <div class="sc${e?.status === "available" ? " sav" : ""}" id="scav">
+          <div class="sci">✅</div><div>Available</div><div class="scs">In Office / Reachable</div>
+        </div>
+        <div class="sc${e?.status === "travelling" ? " str" : ""}" id="sctr">
+          <div class="sci">✈️</div><div>Travelling</div><div class="scs">Away / Not Available</div>
+        </div>
       </div>
-      <div class="fg"><label class="flbl">Note (optional)</label><input class="inp" id="tnote" placeholder="e.g. Singapore Conference, NYC Board Meeting" value="${esc(e?.note||"")}"/></div>
+      <div class="fg">
+        <label class="flbl">Note (optional)</label>
+        <input class="inp" id="tnote" placeholder="e.g. Singapore Conference, NYC Board Meeting" value="${esc(e?.note || "")}"/>
+      </div>
       <div class="mactions">
-        <button class="bcx" onclick="_cm()">Cancel</button>
-        ${e?`<button class="bdg" onclick="_cs()">Clear</button>`:""}
-        <button class="bsv" onclick="_sv()">Save</button>
+        <button class="bcx" id="mbtn-cancel">Cancel</button>
+        ${e ? `<button class="bdg" id="mbtn-clear">Clear</button>` : ""}
+        <button class="bsv" id="mbtn-save">Save</button>
       </div>
     </div>
   </div>`;
+
+  // Attach events after innerHTML renders - reliable inside ES modules
+  document.getElementById("scav").addEventListener("click", () => _ps("available"));
+  document.getElementById("sctr").addEventListener("click", () => _ps("travelling"));
+  document.getElementById("mbtn-cancel").addEventListener("click", _cm);
+  document.getElementById("mbtn-save").addEventListener("click", _sv);
+  document.getElementById("ov").addEventListener("click", ev => { if (ev.target.id === "ov") _cm(); });
+  const clrBtn = document.getElementById("mbtn-clear");
+  if (clrBtn) clrBtn.addEventListener("click", _cs);
 };
 window._ps = s => {
   modalSt.sel=s;
@@ -599,19 +619,27 @@ window._cs = async () => {
 window._cm = () => { document.getElementById("modlayer").innerHTML=""; };
 
 window._orm = (id, name) => {
-  document.getElementById("modlayer").innerHTML=`
-  <div class="ov" id="ov" onclick="if(event.target.id==='ov')_cm()">
+  document.getElementById("modlayer").innerHTML = `
+  <div class="ov" id="rov">
     <div class="mod" style="width:400px">
       <div class="mtitle">Rename Director</div>
       <div class="msub">Current name: ${name}</div>
-      <div class="fg"><label class="flbl">New Name</label><input class="inp" id="rinp" value="${name}" onkeydown="if(event.key==='Enter')_rn('${id}','${name}')"/></div>
+      <div class="fg">
+        <label class="flbl">New Name</label>
+        <input class="inp" id="rinp" value="${name}"/>
+      </div>
       <div class="mactions">
-        <button class="bcx" onclick="_cm()">Cancel</button>
-        <button class="bsv" onclick="_rn('${id}','${name}')">Save Name</button>
+        <button class="bcx" id="rbtn-cancel">Cancel</button>
+        <button class="bsv" id="rbtn-save">Save Name</button>
       </div>
     </div>
   </div>`;
-  setTimeout(()=>document.getElementById("rinp")?.focus(),60);
+  const rinp = document.getElementById("rinp");
+  document.getElementById("rbtn-cancel").addEventListener("click", _cm);
+  document.getElementById("rbtn-save").addEventListener("click", () => _rn(id, name));
+  rinp.addEventListener("keydown", ev => { if (ev.key === "Enter") _rn(id, name); });
+  document.getElementById("rov").addEventListener("click", ev => { if (ev.target.id === "rov") _cm(); });
+  setTimeout(() => rinp?.focus(), 60);
 };
 window._rn = async (id, oldName) => {
   const v = document.getElementById("rinp")?.value?.trim() || "";
