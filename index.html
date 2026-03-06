@@ -193,6 +193,15 @@ body{font-family:'DM Sans',sans-serif;background:#f8f5ef;color:#1a1a2e;min-heigh
 .lmeta{font-size:11px;color:#6b7280;margin-top:4px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
 .lbadge{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
 .empty{text-align:center;padding:40px 20px;color:#6b7280;font-size:14px;line-height:2.2;}
+/* Online presence dot */
+.online-dot{position:absolute;bottom:1px;right:1px;width:10px;height:10px;border-radius:50%;border:2px solid #fff;}
+/* Role toggle */
+.role-toggle{display:flex;border-radius:8px;overflow:hidden;border:1.5px solid #ede9e0;}
+.rtbtn{padding:5px 12px;border:none;background:#f8f5ef;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;color:#6b7280;transition:all .2s;}
+.rtbtn.active-edit{background:#e8f5ee;color:#2d7d52;font-weight:600;}
+.rtbtn.active-view{background:#fef9e7;color:#b8860b;font-weight:600;}
+.rtbtn:hover:not(.active-edit):not(.active-view){background:#ede9e0;}
+.rbadge.edit{background:#e8f5ee;color:#2d7d52;}
 
 /* ── MODAL ── */
 .ov{position:fixed;inset:0;background:rgba(10,20,45,0.68);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
@@ -251,17 +260,20 @@ const auth   = getAuth(fbApp);
 const db     = getFirestore(fbApp);
 // Force network connection (fixes "client is offline" error)
 enableNetwork(db).catch(() => {});
-const COL_DIR  = collection(db, "directors");
-const COL_ACT  = collection(db, "activityLog");
-const tDoc     = id => doc(db, "travelData", id);
+const COL_DIR   = collection(db, "directors");
+const COL_ACT   = collection(db, "activityLog");
+const COL_USERS = collection(db, "users");
+const tDoc      = id => doc(db, "travelData", id);
+const uDoc      = id => doc(db, "users", id);
 
 // ── App State ─────────────────────────────────────────────────
-let CU = null, isAdmin = false;
-let directors = [], travelData = {}, activityLog = [];
+let CU = null, isAdmin = false, canEdit = false;
+let directors = [], travelData = {}, activityLog = [], allUsers = [];
 let selDirId = null, viewM = new Date().getMonth(), viewY = new Date().getFullYear();
 let curPage = "summary";
 let unsubs = [];
 let modalSt = {};
+let presenceInterval = null;
 
 // ── Util ─────────────────────────────────────────────────────
 const toDS = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -293,10 +305,35 @@ onAuthStateChanged(auth, async user => {
   if (user) {
     CU = user;
     isAdmin = ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(user.email.toLowerCase());
+    // Register/update user in Firestore on sign-in
+    const uRef = uDoc(user.uid);
+    const uSnap = await getDoc(uRef);
+    if (!uSnap.exists()) {
+      // New user — default to edit access
+      await setDoc(uRef, {
+        uid: user.uid,
+        name: user.displayName || user.email,
+        email: user.email,
+        photo: user.photoURL || "",
+        role: isAdmin ? "admin" : "edit",
+        firstSeen: serverTimestamp(),
+        lastSeen: serverTimestamp()
+      });
+      canEdit = true;
+    } else {
+      // Existing user — update lastSeen and read their role
+      await updateDoc(uRef, { lastSeen: serverTimestamp(), photo: user.photoURL || "", name: user.displayName || user.email });
+      const role = uSnap.data().role;
+      canEdit = isAdmin || role === "edit";
+    }
+    // Heartbeat every 60s to track online presence
+    if (presenceInterval) clearInterval(presenceInterval);
+    presenceInterval = setInterval(() => updateDoc(uRef, { lastSeen: serverTimestamp() }).catch(()=>{}), 60000);
     renderShell();
     startListeners();
   } else {
-    CU = null; isAdmin = false;
+    CU = null; isAdmin = false; canEdit = false;
+    if (presenceInterval) clearInterval(presenceInterval);
     unsubs.forEach(u=>u()); unsubs=[];
     renderAuth();
   }
@@ -314,7 +351,16 @@ function startListeners() {
     activityLog = snap.docs.map(d=>({id:d.id,...d.data()}));
     if (curPage==="admin") renderContent();
   });
-  unsubs.push(u1, u2);
+  // Live user list — shows everyone who has ever signed in
+  const u3 = onSnapshot(query(COL_USERS, orderBy("lastSeen","desc")), snap => {
+    allUsers = snap.docs.map(d=>({id:d.id,...d.data()}));
+    // Update local canEdit if admin changed our role
+    const me = allUsers.find(u=>u.uid===CU?.uid);
+    if (me && !isAdmin) canEdit = me.role === "edit";
+    if (curPage==="admin") renderContent();
+    updateTopbarRole();
+  });
+  unsubs.push(u1, u2, u3);
 }
 let tUnsubs = [];
 function startTravelListeners() {
@@ -368,6 +414,18 @@ async function clearStatus(dirId, ds) {
   logAct("status_clear",{dirId, dirName:directors.find(d=>d.id===dirId)?.name, date:ds});
 }
 
+// ── Update topbar role label live ────────────────────────────
+function updateTopbarRole() {
+  const el = document.getElementById("topbar-role-lbl");
+  if (el) el.textContent = isAdmin ? "👑 Admin" : canEdit ? "✏️ Editor" : "👁 Viewer";
+}
+
+// ── Change user role (admin only) ────────────────────────────
+async function changeUserRole(uid, newRole) {
+  await updateDoc(uDoc(uid), { role: newRole });
+  logAct("role_change", { uid, newRole });
+}
+
 // ── Seed (first-run) ─────────────────────────────────────────
 async function seedIfNeeded() {
   const s = await getDoc(doc(db,"meta","seeded"));
@@ -406,7 +464,7 @@ function renderShell() {
         ${CU.photoURL?`<img src="${CU.photoURL}" class="user-photo"/>`:`<div class="user-av">${(CU.displayName||CU.email)[0].toUpperCase()}</div>`}
         <div>
           <div class="user-dname">${CU.displayName||CU.email}</div>
-          <div class="user-role-lbl">${isAdmin?"👑 Admin":"👁 Viewer"}</div>
+          <div class="user-role-lbl" id="topbar-role-lbl">${isAdmin ? "👑 Admin" : canEdit ? "✏️ Editor" : "👁 Viewer"}</div>
         </div>
       </div>
       <button class="btn-out" onclick="doSignOut()">Sign Out</button>
@@ -430,9 +488,41 @@ window._pg = p => { curPage=p; renderNav(); renderContent(); };
 
 function renderContent() {
   const el = document.getElementById("maincontent"); if(!el)return;
-  if (curPage==="summary")  el.innerHTML = buildSummary();
-  if (curPage==="calendar") el.innerHTML = buildCalendar();
-  if (curPage==="admin")    el.innerHTML = buildAdmin();
+  if (curPage==="summary") {
+    el.innerHTML = buildSummary();
+    el.querySelector("#mprev")?.addEventListener("click", () => _cm2(-1));
+    el.querySelector("#mnext")?.addEventListener("click", () => _cm2(1));
+  }
+  if (curPage==="calendar") {
+    el.innerHTML = buildCalendar();
+    el.querySelector("#mprev")?.addEventListener("click", () => _cm2(-1));
+    el.querySelector("#mnext")?.addEventListener("click", () => _cm2(1));
+    // Director tabs
+    el.querySelectorAll("[data-dir-id]").forEach(btn => btn.addEventListener("click", () => _sd(btn.dataset.dirId)));
+    // Calendar cells
+    el.querySelectorAll("[data-cal-dir][data-cal-ds]").forEach(cell => cell.addEventListener("click", () => _osm(cell.dataset.calDir, cell.dataset.calDs)));
+  }
+  if (curPage==="admin") {
+    el.innerHTML = buildAdmin();
+    // Attach role toggle buttons via addEventListener (ES module safe)
+    allUsers.forEach(u => {
+      const editBtn = document.getElementById("rtbtn-edit-"+u.uid);
+      const viewBtn = document.getElementById("rtbtn-view-"+u.uid);
+      if (editBtn) editBtn.addEventListener("click", () => _crl(u.uid, "edit"));
+      if (viewBtn) viewBtn.addEventListener("click", () => _crl(u.uid, "view"));
+    });
+    // Attach director rename/delete buttons
+    el.querySelectorAll("[data-ren-id]").forEach(btn => {
+      btn.addEventListener("click", () => _orm(btn.dataset.renId, btn.dataset.renName));
+    });
+    el.querySelectorAll("[data-del-id]").forEach(btn => {
+      btn.addEventListener("click", () => _dd(btn.dataset.delId, btn.dataset.delName));
+    });
+    const ndinp = document.getElementById("ndinp");
+    if (ndinp) ndinp.addEventListener("keydown", e => { if(e.key==="Enter") _ad(); });
+    const addbtn = document.getElementById("addbtn");
+    if (addbtn) addbtn.addEventListener("click", () => _ad());
+  }
 }
 
 // ── SUMMARY ──────────────────────────────────────────────────
@@ -486,14 +576,14 @@ function buildCalendar() {
   return `
   <div>
     <div class="ph">
-      <div><div class="pt">Director Calendars</div><div class="ps">${isAdmin?"Click a date to update status":"View only — admin manages status"}</div></div>
+      <div><div class="pt">Director Calendars</div><div class="ps">${canEdit?"Click a date to update status":"View only — contact admin for edit access"}</div></div>
       ${mnav()}
     </div>
-    <div class="dtabs">${directors.map(dr=>`<button class="dtab${dr.id===selDirId?" active":""}" onclick="_sd('${dr.id}')">${dr.name}</button>`).join("")}</div>
+    <div class="dtabs">${directors.map(dr=>`<button class="dtab${dr.id===selDirId?" active":""}" data-dir-id="${dr.id}">${dr.name}</button>`).join("")}</div>
     <div class="calwrap">
       <div class="caltop">
         <div class="caldn">${sdir?.name||"—"}</div>
-        <div class="calh">${isAdmin?"✏️ Click a date to set status":"👁 View only"}</div>
+        <div class="calh">${canEdit?"✏️ Click a date to set status":"👁 View only"}</div>
       </div>
       <div class="cghdr">${DAYS.map(d=>`<div class="cdl">${d}</div>`).join("")}</div>
       <div class="cgrid">
@@ -507,13 +597,10 @@ function buildCalendar() {
     </div>
   </div>`;
 }
-window._sd = id => { selDirId=id; renderContent(); };
+window._sd = id => { selDirId=id; renderContent(); }; // kept as fallback
 
 // ── ADMIN ─────────────────────────────────────────────────────
 function buildAdmin() {
-  const seen={};
-  activityLog.forEach(e=>{if(!seen[e.userEmail])seen[e.userEmail]={email:e.userEmail,name:e.userName,photo:e.userPhoto,role:e.userRole};});
-  const users=Object.values(seen);
   return `
   <div>
     <div class="ph"><div><div class="pt">Admin Panel</div><div class="ps">Manage directors · monitor changes · real-time</div></div></div>
@@ -521,13 +608,38 @@ function buildAdmin() {
 
       <div class="acard">
         <div class="ctitle">✈️ Directors <span class="chint">Click ✏️ to rename</span></div>
-        ${directors.map(d=>`<div class="drow"><span class="drn">${d.name}</span><div class="drbtns"><button class="bsm edit" onclick="_orm('${d.id}','${esc(d.name)}')">✏️ Rename</button><button class="bsm danger" onclick="_dd('${d.id}','${esc(d.name)}')">Remove</button></div></div>`).join("")}
-        <div class="adrow"><input class="inp" id="ndinp" placeholder="New director full name" onkeydown="if(event.key==='Enter')_ad()"/><button class="btnadd" onclick="_ad()">+ Add</button></div>
+        ${directors.map(d=>`<div class="drow"><span class="drn">${d.name}</span><div class="drbtns"><button class="bsm edit" data-ren-id="${d.id}" data-ren-name="${esc(d.name)}">✏️ Rename</button><button class="bsm danger" data-del-id="${d.id}" data-del-name="${esc(d.name)}">Remove</button></div></div>`).join("")}
+        <div class="adrow"><input class="inp" id="ndinp" placeholder="New director full name"/><button class="btnadd" id="addbtn">+ Add</button></div>
       </div>
 
       <div class="acard">
-        <div class="ctitle">👥 Users Who've Signed In <span class="chint">Via Google</span></div>
-        ${users.length===0?`<p class="empty" style="padding:20px">No users yet.</p>`:users.map(u=>`<div class="urow">${u.photo?`<img src="${u.photo}" class="uphoto"/>`:`<div class="uav">${u.name[0].toUpperCase()}</div>`}<div class="uri"><div class="urn">${u.name}</div><div class="ure">${u.email}</div></div><span class="rbadge ${u.role}">${u.role==="admin"?"👑 Admin":"👤 Viewer"}</span></div>`).join("")}
+        <div class="ctitle">👥 All Users <span class="chint">Toggle Edit / View access</span></div>
+        ${allUsers.length===0
+          ? `<p class="empty" style="padding:20px">No users yet.</p>`
+          : allUsers.map(u => {
+              const isOnline = u.lastSeen && (Date.now() - (u.lastSeen.toDate ? u.lastSeen.toDate() : new Date(u.lastSeen)).getTime()) < 5*60*1000;
+              const isMe = u.uid === CU.uid;
+              const uRole = u.role || "edit";
+              return `<div class="urow">
+                <div style="position:relative">
+                  ${u.photo ? `<img src="${u.photo}" class="uphoto"/>` : `<div class="uav">${u.name[0].toUpperCase()}</div>`}
+                  <span class="online-dot" style="background:${isOnline?"#4ade80":"#9ca3af"}" title="${isOnline?"Online now":"Offline"}"></span>
+                </div>
+                <div class="uri">
+                  <div class="urn">${u.name}${isMe?" (you)":""}</div>
+                  <div class="ure">${u.email}</div>
+                </div>
+                ${uRole === "admin"
+                  ? `<span class="rbadge admin">👑 Admin</span>`
+                  : isMe ? `<span class="rbadge edit">✏️ Editor</span>`
+                  : `<div class="role-toggle">
+                      <button class="rtbtn${uRole==="edit"?" active-edit":""}" id="rtbtn-edit-${u.uid}">✏️ Edit</button>
+                      <button class="rtbtn${uRole==="view"?" active-view":""}" id="rtbtn-view-${u.uid}">👁 View</button>
+                    </div>`
+                }
+              </div>`;
+            }).join("")
+        }
       </div>
 
       <div class="acard fw">
@@ -542,7 +654,7 @@ function buildAdmin() {
 }
 
 function buildLE(e) {
-  const d=e.details||{},badges={status_set:{c:"#2d7d52",bg:"#e8f5ee",l:"Status Set"},status_clear:{c:"#888",bg:"#ede9e0",l:"Cleared"},dir_rename:{c:"#6c3483",bg:"#f5eef8",l:"Renamed"},dir_add:{c:"#b8860b",bg:"#fef9e7",l:"Added"},dir_delete:{c:"#c0392b",bg:"#fdecea",l:"Deleted"}};
+  const d=e.details||{},badges={status_set:{c:"#2d7d52",bg:"#e8f5ee",l:"Status Set"},status_clear:{c:"#888",bg:"#ede9e0",l:"Cleared"},dir_rename:{c:"#6c3483",bg:"#f5eef8",l:"Renamed"},dir_add:{c:"#b8860b",bg:"#fef9e7",l:"Added"},dir_delete:{c:"#c0392b",bg:"#fdecea",l:"Deleted"},role_change:{c:"#1a3060",bg:"#e8eef8",l:"Access Changed"}};
   const b=badges[e.action]||{c:"#888",bg:"#eee",l:e.action};
   let txt="";
   if(e.action==="status_set")   txt=`marked <b>${d.dirName}</b> as <b>${d.status==="available"?"✅ Available":"✈️ Travelling"}</b> on <b>${fmtD(d.date)}</b>${d.note?` — <i>"${d.note}"</i>`:""}`;
@@ -550,12 +662,13 @@ function buildLE(e) {
   else if(e.action==="dir_rename")   txt=`renamed director <b>${d.oldName}</b> → <b>${d.newName}</b>`;
   else if(e.action==="dir_add")      txt=`added director <b>${d.name}</b>`;
   else if(e.action==="dir_delete")   txt=`removed director <b>${d.name}</b>`;
+  else if(e.action==="role_change")   txt=`changed a user's access to <b>${d.newRole === 'edit' ? '✏️ Edit' : '👁 View'}</b>`;
   return `<div class="litem">${e.userPhoto?`<img src="${e.userPhoto}" class="lav"/>`:`<div class="lavt${e.userRole==="admin"?" isa":""}">${e.userName[0].toUpperCase()}</div>`}<div class="lbody"><div class="ltxt"><b>${e.userName}</b> ${txt}</div><div class="lmeta"><span class="lbadge" style="color:${b.c};background:${b.bg}">${b.l}</span><span>${e.ts?fmtT(e.ts):"just now"}</span><span style="color:${e.userRole==="admin"?"#b8860b":"#6b7280"}">${e.userRole==="admin"?"👑 Admin":"👤 User"}</span><span>${e.userEmail}</span></div></div></div>`;
 }
 
 // ── Modal helpers ─────────────────────────────────────────────
 window._osm = (dirId, ds) => {
-  if (!isAdmin) return;
+  if (!canEdit) return;
   const e = getEntry(dirId, ds), dir = directors.find(d => d.id === dirId);
   modalSt = { dirId, ds, sel: e?.status || null };
 
@@ -649,6 +762,10 @@ window._rn = async (id, oldName) => {
   toast("Director renamed!");
 };
 window._dd = (id, name) => deleteDirector(id, name);
+window._crl = async (uid, newRole) => {
+  await changeUserRole(uid, newRole);
+  toast(newRole === "edit" ? "Edit access granted!" : "Changed to view only.");
+};
 window._ad = async () => {
   const v=document.getElementById("ndinp")?.value?.trim();
   if(!v) return;
@@ -659,7 +776,7 @@ window._ad = async () => {
 
 // ── Shared component helpers ──────────────────────────────────
 function mnav() {
-  return `<div class="mnav"><button class="mbtn" onclick="_cm2(-1)">‹</button><div class="mlbl">${mLbl(viewY,viewM)}</div><button class="mbtn" onclick="_cm2(1)">›</button></div>`;
+  return `<div class="mnav"><button class="mbtn" id="mprev">‹</button><div class="mlbl">${mLbl(viewY,viewM)}</div><button class="mbtn" id="mnext">›</button></div>`;
 }
 window._cm2 = d => { viewM+=d; if(viewM>11){viewM=0;viewY++;}if(viewM<0){viewM=11;viewY--;} renderContent(); };
 function sc(val,lbl,accent) { return `<div class="scard" style="border-left:4px solid ${accent}"><div class="sv">${val}</div><div class="sl">${lbl}</div></div>`; }
