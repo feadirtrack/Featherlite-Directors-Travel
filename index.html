@@ -369,7 +369,7 @@ async function clearStatus(dirId, ds) {
 async function seedIfNeeded() {
   const s = await getDoc(doc(db,"meta","seeded"));
   if (s.exists()) return;
-  const names = ["Rajesh Kumar","Priya Sharma","Anand Mehta","Sunita Patel","Vikram Singh","Meena Rao","Arjun Nair","Deepa Reddy"];
+  const names = ["Jawahar Gopal","Manohar Gopal","Dhiren Gopal","Lav Jawahar","Kush Jawahar","Aditya Manohar Chellaram","Arune Dhiren Chellaram","Kiren Dhiren Chellaram"];
   for (const name of names) await addDoc(COL_DIR,{name,createdAt:serverTimestamp()});
   await setDoc(doc(db,"meta","seeded"),{at:serverTimestamp()});
 }
