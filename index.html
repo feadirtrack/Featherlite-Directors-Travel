@@ -320,33 +320,39 @@ onAuthStateChanged(auth, async user => {
   if (user) {
     CU = user;
     isAdmin = ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(user.email.toLowerCase());
-    // Register/update user in Firestore on sign-in
-    const uRef = uDoc(user.uid);
-    const uSnap = await getDoc(uRef);
-    if (!uSnap.exists()) {
-      // New user — default to edit access
-      await setDoc(uRef, {
-        uid: user.uid,
-        name: user.displayName || user.email,
-        email: user.email,
-        photo: user.photoURL || "",
-        role: isAdmin ? "admin" : "edit",
-        firstSeen: serverTimestamp(),
-        lastSeen: serverTimestamp()
-      });
-      canEdit = true;
-    } else {
-      // Existing user — update lastSeen and read their role
-      await updateDoc(uRef, { lastSeen: serverTimestamp(), photo: user.photoURL || "", name: user.displayName || user.email });
-      const role = uSnap.data().role;
-      // Default to edit if role not explicitly set to "view"
-      canEdit = isAdmin || role !== "view";
-    }
-    // Heartbeat every 60s to track online presence
-    if (presenceInterval) clearInterval(presenceInterval);
-    presenceInterval = setInterval(() => updateDoc(uRef, { lastSeen: serverTimestamp() }).catch(()=>{}), 60000);
+    // Default to edit — render immediately so user is never stuck on login screen
+    canEdit = true;
     renderShell();
     startListeners();
+    // Firestore user registration runs in background — never blocks sign-in
+    try {
+      const uRef = uDoc(user.uid);
+      const uSnap = await getDoc(uRef);
+      if (!uSnap.exists()) {
+        // New user — create record with edit access
+        await setDoc(uRef, {
+          uid: user.uid,
+          name: user.displayName || user.email,
+          email: user.email,
+          photo: user.photoURL || "",
+          role: isAdmin ? "admin" : "edit",
+          firstSeen: serverTimestamp(),
+          lastSeen: serverTimestamp()
+        });
+      } else {
+        // Existing user — read their role, then update lastSeen
+        const role = uSnap.data().role;
+        canEdit = isAdmin || role !== "view";
+        updateTopbarRole();
+        updateDoc(uRef, { lastSeen: serverTimestamp(), photo: user.photoURL || "", name: user.displayName || user.email }).catch(()=>{});
+      }
+      // Heartbeat every 60s
+      if (presenceInterval) clearInterval(presenceInterval);
+      presenceInterval = setInterval(() => updateDoc(uDoc(user.uid), { lastSeen: serverTimestamp() }).catch(()=>{}), 60000);
+    } catch(e) {
+      // Firestore error — user is still signed in, just with default edit access
+      console.warn("Firestore user registration error (non-fatal):", e.message);
+    }
   } else {
     CU = null; isAdmin = false; canEdit = false;
     if (presenceInterval) clearInterval(presenceInterval);
