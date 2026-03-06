@@ -247,7 +247,7 @@ body{font-family:'DM Sans',sans-serif;background:#f8f5ef;color:#1a1a2e;min-heigh
 
 <script type="module">
 import { initializeApp }           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
                                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, collection, onSnapshot, setDoc, updateDoc,
          deleteDoc, addDoc, getDoc, serverTimestamp, query, orderBy, limit,
@@ -260,6 +260,8 @@ const auth   = getAuth(fbApp);
 const db     = getFirestore(fbApp);
 // Force network connection (fixes "client is offline" error)
 enableNetwork(db).catch(() => {});
+// Handle redirect result on page load
+getRedirectResult(auth).catch(() => {});
 const COL_DIR   = collection(db, "directors");
 const COL_ACT   = collection(db, "activityLog");
 const COL_USERS = collection(db, "users");
@@ -297,7 +299,7 @@ const logAct = (action, details) => addDoc(COL_ACT,{
 });
 
 // ── Auth ─────────────────────────────────────────────────────
-const doGoogleSignIn = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e=>toast("Sign-in failed: "+e.message,"error"));
+const doGoogleSignIn = () => signInWithRedirect(auth, new GoogleAuthProvider()).catch(e=>toast("Sign-in failed: "+e.message,"error"));
 const doSignOut = () => { unsubs.forEach(u=>u()); unsubs=[]; signOut(auth); };
 window.doSignOut = doSignOut;
 
@@ -324,7 +326,8 @@ onAuthStateChanged(auth, async user => {
       // Existing user — update lastSeen and read their role
       await updateDoc(uRef, { lastSeen: serverTimestamp(), photo: user.photoURL || "", name: user.displayName || user.email });
       const role = uSnap.data().role;
-      canEdit = isAdmin || role === "edit";
+      // Default to edit if role not explicitly set to "view"
+      canEdit = isAdmin || role !== "view";
     }
     // Heartbeat every 60s to track online presence
     if (presenceInterval) clearInterval(presenceInterval);
@@ -591,7 +594,7 @@ function buildCalendar() {
         ${Array.from({length:d},(_,i)=>i+1).map(n=>{
           const ds=toDS(new Date(viewY,viewM,n)),e=getEntry(selDirId,ds),it=ds===today;
           const av=e?.status==="available",tr=e?.status==="travelling";
-          return `<div class="cc${av?" available":tr?" travelling":""}${it?" today":""}${isAdmin?" clickable":""}" ${isAdmin?`onclick="_osm('${selDirId}','${ds}')"`:""}><span class="cn">${n}</span><span class="ci">${av?"✅":tr?"✈️":""}</span>${e?.note?`<span class="cn2">${e.note}</span>`:""}</div>`;
+          return `<div class="cc${av?" available":tr?" travelling":""}${it?" today":""}${canEdit?" clickable":""}" ${canEdit?`data-cal-dir="${selDirId}" data-cal-ds="${ds}"`:""}><span class="cn">${n}</span><span class="ci">${av?"✅":tr?"✈️":""}</span>${e?.note?`<span class="cn2">${e.note}</span>`:""}</div>`;
         }).join("")}
       </div>
     </div>
