@@ -579,13 +579,23 @@ window._ps = s => {
   document.getElementById("sctr").className="sc"+(s==="travelling"?" str":"");
 };
 window._sv = async () => {
-  if (!modalSt.sel) return toast("Please select a status","error");
-  const note=document.getElementById("tnote").value.trim();
-  _cm();
-  await setStatus(modalSt.dirId, modalSt.ds, modalSt.sel, note);
+  // Read all values from DOM BEFORE _cm() destroys the modal
+  const sel = modalSt.sel;
+  if (!sel) return toast("Please select a status","error");
+  const note = document.getElementById("tnote")?.value?.trim() || "";
+  const dirId = modalSt.dirId;
+  const ds = modalSt.ds;
+  _cm(); // close modal AFTER reading values
+  await setStatus(dirId, ds, sel, note);
   toast("Status saved!");
 };
-window._cs = async () => { _cm(); await clearStatus(modalSt.dirId, modalSt.ds); toast("Status cleared."); };
+window._cs = async () => {
+  const dirId = modalSt.dirId;
+  const ds = modalSt.ds;
+  _cm();
+  await clearStatus(dirId, ds);
+  toast("Status cleared.");
+};
 window._cm = () => { document.getElementById("modlayer").innerHTML=""; };
 
 window._orm = (id, name) => {
@@ -604,8 +614,9 @@ window._orm = (id, name) => {
   setTimeout(()=>document.getElementById("rinp")?.focus(),60);
 };
 window._rn = async (id, oldName) => {
-  const v=document.getElementById("rinp").value.trim();
+  const v = document.getElementById("rinp")?.value?.trim() || "";
   _cm();
+  if (!v) return;
   await renameDirector(id, oldName, v);
   toast("Director renamed!");
 };
